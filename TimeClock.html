@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>巨幅时钟 · 满屏1920x1080 · 加日期星期</title>
+    <style>
+        /* 全局强制直角，底色精准，字体最大加粗 ———— 原样保留，一条不删 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            border-radius: 0 !important;      /* 不要任何圆角 */
+            -webkit-appearance: none;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100vh;
+            background-color: #CAB577;          /* 修改为新的背景色 */
+            overflow: hidden;                    /* 防止滚动条，确保满屏无白边 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Microsoft YaHei', '微软雅黑', 'PingFang SC', 'Helvetica Neue', sans-serif;
+            font-weight: 900;                    /* 极大加粗，部分字重用900 */
+            color: white;                         /* 白色文字在高灰紫背景下清晰 */
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 主容器：弹性列，严格居中，不留多余空隙 */
+        .clock-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100vh;                        /* 满视口高度 */
+            max-width: 1920px;                     /* 理想宽度限制，但依然背景满铺 */
+            max-height: 1080px;                     /* 理想高度限制 */
+            margin: auto;
+            padding: 0;                            /* 确保没有任何内边距 */
+        }
+
+        /* 时间主数字容器 — 一行显示，所有数字和冒号继承父字体 */
+        .time-digits {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            line-height: 1;                          /* 去掉行高额外空隙，让字体实际占高尽可能接近font-size */
+            margin: 0;
+            padding: 0;
+            border: none;
+            font-weight: 900;
+            color: white;
+            /* 字体大小将由JS动态精确设置，此处备选极大值保证初始够大 */
+            font-size: 85vh;                          /* 后备，JS会覆盖 */
+        }
+
+        /* 时、分、秒独立span + 冒号span共用相同样式 */
+        .time-digits span {
+            display: inline-block;
+            vertical-align: middle;
+            font-weight: inherit;
+            line-height: 1;
+            margin: 0;
+            padding: 0;
+            text-align: center;
+        }
+
+        /* 冒号微调视觉，可稍微窄一点，但仍保持巨大 */
+        .colon {
+            margin: 0 0.02em;                         /* 微小间距，避免数字贴在一起 */
+            transform: translateY(-0.01em);            /* 极微对齐，视觉舒适 */
+        }
+
+        /* 保证任何情况无圆角 */
+        .time-digits, .colon, .time-digits span {
+            border-radius: 0 !important;
+        }
+
+        /* 针对小屏极端情况，让文字稍微缩小避免溢出，但保留JS主导 */
+        @media (max-aspect-ratio: 16/9) {
+            .time-digits {
+                font-size: 75vh;   /* 窄屏备用，但JS动态覆盖更精准 */
+            }
+        }
+
+        /* 新增日期行样式 — 只比时间小一点，紧贴下方 */
+        .date-row {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+            line-height: 1.2;                /* 舒适行高，但不会占用太多垂直空间 */
+            margin: 0;                        /* 紧挨着时间数字，无多余外边距 */
+            padding: 0;
+            font-weight: 600;                 /* 半加粗，比时间稍细一点但依然醒目 */
+            color: white;
+            text-align: center;
+            letter-spacing: 0.5px;             /* 略微字距，更易阅读 */
+            border-radius: 0 !important;
+            background-color: transparent;
+            width: 100%;
+            max-width: 100%;
+            /* 字体大小由JS动态控制（按时间字体比例设定） */
+        }
+        /* 日期行内的文本均无圆角 */
+        .date-row span, .date-row * {
+            border-radius: 0 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="clock-container">
+        <!-- 时分秒显示 (原封不动) -->
+        <div class="time-digits" id="timeDigits">
+            <span id="hours">00</span>
+            <span class="colon">:</span>
+            <span id="minutes">00</span>
+            <span class="colon">:</span>
+            <span id="seconds">00</span>
+        </div>
+
+        <!-- 新增：年月日星期行 (紧挨着上方时间) -->
+        <div class="date-row" id="dateRow">
+            <span id="dateDisplay">2025年2月15日 星期六</span>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // 获取DOM元素 (原有)
+            const hourSpan = document.getElementById('hours');
+            const minuteSpan = document.getElementById('minutes');
+            const secondSpan = document.getElementById('seconds');
+            const timeContainer = document.getElementById('timeDigits');
+            
+            // 新增：日期显示元素
+            const dateRow = document.getElementById('dateRow');
+            const dateDisplaySpan = document.getElementById('dateDisplay');
+
+            // ========= 更新时间 (北京时间，含年月日星期) =========
+            function updateClock() {
+                const now = new Date();
+                
+                // --- 时分秒 (原逻辑，UTC+8) ---
+                let bjHour = (now.getUTCHours() + 8) % 24;
+                const bjMinute = now.getUTCMinutes();
+                const bjSecond = now.getUTCSeconds();
+                hourSpan.textContent = bjHour.toString().padStart(2, '0');
+                minuteSpan.textContent = bjMinute.toString().padStart(2, '0');
+                secondSpan.textContent = bjSecond.toString().padStart(2, '0');
+
+                // --- 年月日星期 (北京时间，基于时区偏移计算，确保日期正确) ---
+                // 构造北京时间日期对象 (直接给当前时间加上8小时，再读取UTC年/月/日/星期)
+                const bjDate = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+                const year = bjDate.getUTCFullYear();
+                const month = bjDate.getUTCMonth() + 1;          // 月份不加前导零，符合中文习惯
+                const day = bjDate.getUTCDate();
+                const weekDayIndex = bjDate.getUTCDay();         // 0 = 星期日, 1 = 星期一 ...
+
+                // 星期数组 (中文)
+                const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+                const weekStr = weekdays[weekDayIndex];
+
+                // 格式：2025年2月15日 星期六  (紧凑但美观)
+                dateDisplaySpan.textContent = `${year}年${month}月${day}日 ${weekStr}`;
+            }
+
+            // 每秒更新，并立即执行一次
+            updateClock();
+            setInterval(updateClock, 1000);
+
+            // ========= 动态字体大小调节：让时间数字尽可能大，日期按比例缩小（只比时间小一点） =========
+            function adjustFontSize() {
+                if (!timeContainer || !dateRow) return;
+
+                // 获取视口高度
+                const viewportHeight = window.innerHeight;
+                const viewportWidth = window.innerWidth;  // 用于宽度溢出保护
+
+                // 固定安全边距 (上下留空，保持视觉舒适，与原来一致)
+                const totalSafeMargin = 12;  // px
+
+                // 设置日期字体相对于时间字体的比例 —— 已修改为 0.81
+                const dateFontRatio = 0.81;   // 0.81 表示日期字体是时间字体的81% (只比时间小一点)
+
+                // 日期行 line-height 系数 (来自CSS .date-row 的 line-height: 1.2)
+                const dateLineHeight = 1.2;
+
+                // 计算时间字体大小 (tf) 的公式：
+                // 总高度 ≈ tf + (tf * dateFontRatio * dateLineHeight) + totalSafeMargin = viewportHeight
+                // 因此 tf = (viewportHeight - totalSafeMargin) / (1 + dateFontRatio * dateLineHeight)
+                let timeFontSize = (viewportHeight - totalSafeMargin) / (1 + dateFontRatio * dateLineHeight);
+
+                // 限制时间字体过大或过小
+                const MAX_TIME_FONT = 1200;
+                const MIN_TIME_FONT = 100;
+                if (timeFontSize > MAX_TIME_FONT) timeFontSize = MAX_TIME_FONT;
+                if (timeFontSize < MIN_TIME_FONT) timeFontSize = MIN_TIME_FONT;
+
+                // 计算日期字体大小 = 时间字体 * 比例
+                let dateFontSize = timeFontSize * dateFontRatio;
+
+                // 对日期字体额外限制：最小24px，最大200px（同时考虑宽度，避免溢出）
+                const MIN_DATE_FONT = 24;
+                const MAX_DATE_FONT = 200;
+                if (dateFontSize > MAX_DATE_FONT) dateFontSize = MAX_DATE_FONT;
+                if (dateFontSize < MIN_DATE_FONT) dateFontSize = MIN_DATE_FONT;
+
+                // 宽度溢出保护：如果日期文字预计宽度超过视口宽度，适当减小日期字体
+                // 估算当前日期字符串长度 (汉字占0.5em? 保守按每个字符0.6em估算)
+                const dateText = dateDisplaySpan.textContent;
+                const charCount = dateText.length;
+                const estimatedWidth = dateFontSize * 0.6 * charCount;  // 0.6 为字符平均宽度因子
+                if (estimatedWidth > viewportWidth * 0.95) { // 超过95%宽度则缩减
+                    dateFontSize = (viewportWidth * 0.9) / (0.6 * charCount);
+                    // 同时保证不低于最小
+                    if (dateFontSize < MIN_DATE_FONT) dateFontSize = MIN_DATE_FONT;
+                    // 如果缩减后时间字体可能变化，但时间字体我们保持不变（优先保证日期可见不溢出）
+                }
+
+                // 应用字体大小
+                timeContainer.style.fontSize = timeFontSize + 'px';
+                dateRow.style.fontSize = dateFontSize + 'px';
+
+                // 强制日期行不换行 (CSS已保证)
+                dateRow.style.whiteSpace = 'nowrap';
+            }
+
+            // 监听窗口大小变化
+            window.addEventListener('resize', adjustFontSize);
+
+            // 初始化调整
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', adjustFontSize);
+            } else {
+                adjustFontSize();
+            }
+
+            // 定期检查视口高度变化 (例如移动端工具栏折叠)
+            let lastViewportHeight = window.innerHeight;
+            setInterval(function() {
+                if (Math.abs(window.innerHeight - lastViewportHeight) > 5) {
+                    adjustFontSize();
+                    lastViewportHeight = window.innerHeight;
+                }
+            }, 1000);
+        })();
+    </script>
+
+    <!-- 额外确保1920x1080全硬边：任何伪元素或焦点轮廓都不要圆角 (原样加强) -->
+    <style>
+        /* 干掉任何可能的outline或圆角 */
+        :focus, :active, :hover {
+            outline: none;
+            border-radius: 0;
+        }
+        ::before, ::after {
+            border-radius: 0;
+        }
+        /* 保证body背景严格一致，无渐变无图片 */
+        body {
+            background-color: #6E7184;   /* 同步修改此处背景色 */
+        }
+        /* 如果浏览器有最小字体限制，暴力覆盖 */
+        .time-digits {
+            font-weight: 900;
+        }
+        /* 新增日期行同样强制无圆角，且继承背景透明 */
+        .date-row {
+            background-color: transparent;
+        }
+    </style>
+</body>
+</html>
