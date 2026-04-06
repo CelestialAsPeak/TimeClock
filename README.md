@@ -1,5 +1,9 @@
 # 基于html的时钟
 
+![HTML5](https://img.shields.io/badge/HTML5-E34F26?logo=html5&logoColor=white)
+![CSS3](https://img.shields.io/badge/CSS3-1572B6?logo=css3&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black)
+
 一个为 **1920×1080** 大屏幕（或任何分辨率）设计的全屏数字时钟。  
 自动适配窗口大小，始终显示当前北京时间（24小时制）以及年月日、星期，适合用作 **信息看板、桌面时钟、电视投屏时钟**。
 
